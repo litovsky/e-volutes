@@ -1,20 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
-
-// ── Module data ────────────────────────────────────────────────────
-const MODULES = [
-  {
-    id: 'food',
-    name: 'Производство еды',
-    icon: '🌍',
-    iconHover: '🌾',
-    status: 88,
-    angle: -30,      // degrees, 0 = right, clockwise
-    distance: 280,
-    description: 'Обеспечивает питание 8 млрд человек. Сельское хозяйство, агрономия, пищевая промышленность.',
-    color: '#00ff88',
-  },
-]
+import { supabase } from './lib/supabase'
 
 // ── Stars (generated once) ─────────────────────────────────────────
 const STARS = Array.from({ length: 120 }, (_, i) => ({
@@ -65,12 +51,12 @@ function ModuleBlock({ module, centerX, centerY }) {
     >
       <div className="module-card">
         <span className="module-icon">{module.icon}</span>
-        <span className="module-icon-hover">{module.iconHover}</span>
+        <span className="module-icon-hover">{module.icon_hover}</span>
         <div className="module-name">{module.name}</div>
         <div className="module-status">
           <div
             className="module-status-bar"
-            style={{ width: `${module.status}%`, background: `linear-gradient(90deg, ${module.color}, ${module.color}88)` }}
+            style={{ width: '80%', background: `linear-gradient(90deg, ${module.color}, ${module.color}88)` }}
           />
         </div>
       </div>
@@ -114,22 +100,18 @@ function Lines({ modules, centerX, centerY }) {
         const ex = centerX + pos.x
         const ey = centerY + pos.y
 
-        // offset start from earth edge
         const rad = degToRad(m.angle)
         const startX = centerX + Math.cos(rad) * 65
         const startY = centerY + Math.sin(rad) * 65
 
-        // offset end to card edge (~70px from center)
         const endX = ex - Math.cos(rad) * 72
         const endY = ey - Math.sin(rad) * 40
 
-        // Midpoint with slight curve
         const mx = (startX + endX) / 2
         const my = (startY + endY) / 2 - 20
 
         return (
           <g key={m.id}>
-            {/* Glow line */}
             <path
               d={`M${startX},${startY} Q${mx},${my} ${endX},${endY}`}
               stroke={m.color}
@@ -139,7 +121,6 @@ function Lines({ modules, centerX, centerY }) {
               strokeDasharray="none"
               filter="url(#glow)"
             />
-            {/* Main line */}
             <path
               d={`M${startX},${startY} Q${mx},${my} ${endX},${endY}`}
               stroke={m.color}
@@ -157,7 +138,6 @@ function Lines({ modules, centerX, centerY }) {
                 repeatCount="indefinite"
               />
             </path>
-            {/* Dot at origin */}
             <circle cx={startX} cy={startY} r="3" fill={m.color} opacity="0.5" />
           </g>
         )
@@ -170,6 +150,8 @@ function Lines({ modules, centerX, centerY }) {
 export default function App() {
   const containerRef = useRef(null)
   const [center, setCenter] = useState({ x: 0, y: 0 })
+  const [blocks, setBlocks] = useState([])
+  const [loading, setLoading] = useState(true)
 
   const updateCenter = useCallback(() => {
     if (containerRef.current) {
@@ -183,6 +165,17 @@ export default function App() {
     window.addEventListener('resize', updateCenter)
     return () => window.removeEventListener('resize', updateCenter)
   }, [updateCenter])
+
+  useEffect(() => {
+    supabase
+      .from('blocks')
+      .select('*')
+      .order('order_index')
+      .then(({ data, error }) => {
+        if (!error && data) setBlocks(data)
+        setLoading(false)
+      })
+  }, [])
 
   return (
     <div className="dashboard" ref={containerRef}>
@@ -219,15 +212,15 @@ export default function App() {
       </div>
 
       {/* SVG lines */}
-      {center.x > 0 && (
-        <Lines modules={MODULES} centerX={center.x} centerY={center.y} />
+      {!loading && center.x > 0 && (
+        <Lines modules={blocks} centerX={center.x} centerY={center.y} />
       )}
 
       {/* Earth */}
       <Earth />
 
       {/* Module blocks */}
-      {center.x > 0 && MODULES.map(m => (
+      {!loading && center.x > 0 && blocks.map(m => (
         <ModuleBlock
           key={m.id}
           module={m}
@@ -240,15 +233,15 @@ export default function App() {
       <div className="hud-status">
         <div className="hud-stat">
           <div className="hud-stat-label">Модули</div>
-          <div className="hud-stat-value">{MODULES.length} / 12</div>
+          <div className="hud-stat-value">{loading ? '...' : `${blocks.length} / 10`}</div>
         </div>
         <div className="hud-stat">
-          <div className="hud-stat-label">Стабильность</div>
-          <div className="hud-stat-value">88%</div>
+          <div className="hud-stat-label">Статус</div>
+          <div className="hud-stat-value">{loading ? '...' : 'ONLINE'}</div>
         </div>
         <div className="hud-stat">
           <div className="hud-stat-label">Версия</div>
-          <div className="hud-stat-value">v0.1.0</div>
+          <div className="hud-stat-value">v0.2.0</div>
         </div>
       </div>
     </div>
