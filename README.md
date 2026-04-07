@@ -1,16 +1,49 @@
-# React + Vite
+# E-VOLUTES · Planetary Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Мысленный эксперимент: Земля как космический корабль, а мы — его экипаж, проводящий аудит.
 
-Currently, two official plugins are available:
+Цель — понять, какие профессии реально нужны, какие избыточны, а какие можно улучшить. Выделяем функции, обсуждаем, голосуем, делимся с людьми со всего мира.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Структура проекта
 
-## React Compiler
+```
+e-volutes/
+│
+├── src/                        # Весь React-код
+│   ├── main.jsx                # Точка входа, монтирует App
+│   ├── App.jsx                 # Всё приложение: Earth, ModuleBlock, Lines, App
+│   ├── App.css                 # Стили дашборда (HUD, карточки, анимации)
+│   ├── index.css               # Глобальные стили (body, reset)
+│   ├── lib/
+│   │   └── supabase.js         # Supabase client (читает .env.local)
+│   └── assets/                 # Статика (картинки, иконки)
+│
+├── supabase/                   # SQL для базы данных
+│   ├── schema.sql              # Таблицы: blocks, functions, professions, votes, comments + RLS
+│   └── seed.sql                # Начальные данные: 10 блоков цивилизации
+│
+├── public/                     # Файлы отдаются как есть (favicon и т.д.)
+├── .env.local                  # Ключи Supabase (не в git!)
+├── index.html                  # HTML-оболочка для Vite
+├── vite.config.js              # Конфиг сборщика
+└── package.json                # Зависимости и скрипты
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Запуск
 
-## Expanding the ESLint configuration
+```bash
+npm install
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Нужен файл `.env.local` с ключами Supabase:
+
+```
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+## Стек
+
+- **React 19** + **Vite** — фронтенд
+- **Supabase** — база данных, авторизация, realtime
