@@ -39,17 +39,18 @@ function Earth() {
 }
 
 // ── Module Block ───────────────────────────────────────────────────
-function ModuleBlock({ module, centerX, centerY }) {
+function ModuleBlock({ module, centerX, centerY, isSelected, onClick }) {
   const pos = modulePosition(module.angle, module.distance)
   const blockX = centerX + pos.x
   const blockY = centerY + pos.y
 
   return (
     <div
-      className="module-block"
+      className={`module-block${isSelected ? ' module-block--selected' : ''}`}
       style={{ left: blockX, top: blockY }}
+      onClick={() => onClick(module)}
     >
-      <div className="module-card">
+      <div className="module-card" style={isSelected ? { borderColor: module.color, boxShadow: `0 0 20px ${module.color}44` } : {}}>
         <span className="module-icon">{module.icon}</span>
         <span className="module-icon-hover">{module.icon_hover}</span>
         <div className="module-name">{module.name}</div>
@@ -63,6 +64,86 @@ function ModuleBlock({ module, centerX, centerY }) {
       <div className="tooltip">
         <strong>{module.name}</strong>
         {module.description}
+      </div>
+    </div>
+  )
+}
+
+// ── Function Panel (профессии) ────────────────────────────────────
+function FunctionPanel({ fn, professions, loading, onClose }) {
+  return (
+    <div className="function-panel">
+      <div className="block-panel-header">
+        <div className="block-panel-title">
+          <div>
+            <div className="block-panel-name">{fn.name}</div>
+            <div className="block-panel-sub">ПРОФЕССИИ</div>
+          </div>
+        </div>
+        <button className="block-panel-close" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="block-panel-desc">{fn.description}</div>
+
+      <div className="block-panel-functions">
+        {loading ? (
+          <div className="block-panel-loading">ЗАГРУЗКА...</div>
+        ) : professions.length === 0 ? (
+          <div className="block-panel-loading">НЕТ ДАННЫХ</div>
+        ) : (
+          professions.map((p, i) => (
+            <div key={p.id} className="function-item profession-item">
+              <div className="function-index">0{i + 1}</div>
+              <div className="function-body">
+                <div className="function-name">{p.name}</div>
+                <div className="function-desc">{p.description}</div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Block Panel (drill-down) ───────────────────────────────────────
+function BlockPanel({ block, functions, loading, onClose, onFunctionClick, selectedFunction }) {
+  return (
+    <div className="block-panel">
+      <div className="block-panel-header">
+        <div className="block-panel-title">
+          <span className="block-panel-icon">{block.icon_hover}</span>
+          <div>
+            <div className="block-panel-name">{block.name}</div>
+            <div className="block-panel-sub">ФУНКЦИИ БЛОКА</div>
+          </div>
+        </div>
+        <button className="block-panel-close" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="block-panel-desc">{block.description}</div>
+
+      <div className="block-panel-functions">
+        {loading ? (
+          <div className="block-panel-loading">ЗАГРУЗКА...</div>
+        ) : functions.length === 0 ? (
+          <div className="block-panel-loading">НЕТ ДАННЫХ</div>
+        ) : (
+          functions.map((fn, i) => (
+            <div
+              key={fn.id}
+              className={`function-item${selectedFunction?.id === fn.id ? ' function-item--selected' : ''}`}
+              onClick={() => onFunctionClick(fn)}
+            >
+              <div className="function-index">0{i + 1}</div>
+              <div className="function-body">
+                <div className="function-name">{fn.name}</div>
+                <div className="function-desc">{fn.description}</div>
+              </div>
+              <div className="function-arrow">›</div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
@@ -152,6 +233,12 @@ export default function App() {
   const [center, setCenter] = useState({ x: 0, y: 0 })
   const [blocks, setBlocks] = useState([])
   const [loading, setLoading] = useState(true)
+  const [selectedBlock, setSelectedBlock] = useState(null)
+  const [functions, setFunctions] = useState([])
+  const [functionsLoading, setFunctionsLoading] = useState(false)
+  const [selectedFunction, setSelectedFunction] = useState(null)
+  const [professions, setProfessions] = useState([])
+  const [professionsLoading, setProfessionsLoading] = useState(false)
 
   const updateCenter = useCallback(() => {
     if (containerRef.current) {
@@ -176,6 +263,50 @@ export default function App() {
         setLoading(false)
       })
   }, [])
+
+  const handleBlockClick = useCallback((block) => {
+    if (selectedBlock?.id === block.id) {
+      setSelectedBlock(null)
+      setFunctions([])
+      setSelectedFunction(null)
+      setProfessions([])
+      return
+    }
+    setSelectedBlock(block)
+    setFunctions([])
+    setSelectedFunction(null)
+    setProfessions([])
+    setFunctionsLoading(true)
+    supabase
+      .from('functions')
+      .select('*')
+      .eq('block_id', block.id)
+      .order('order_index')
+      .then(({ data, error }) => {
+        if (!error && data) setFunctions(data)
+        setFunctionsLoading(false)
+      })
+  }, [selectedBlock])
+
+  const handleFunctionClick = useCallback((fn) => {
+    if (selectedFunction?.id === fn.id) {
+      setSelectedFunction(null)
+      setProfessions([])
+      return
+    }
+    setSelectedFunction(fn)
+    setProfessions([])
+    setProfessionsLoading(true)
+    supabase
+      .from('professions')
+      .select('*')
+      .eq('function_id', fn.id)
+      .order('order_index')
+      .then(({ data, error }) => {
+        if (!error && data) setProfessions(data)
+        setProfessionsLoading(false)
+      })
+  }, [selectedFunction])
 
   return (
     <div className="dashboard" ref={containerRef}>
@@ -226,8 +357,32 @@ export default function App() {
           module={m}
           centerX={center.x}
           centerY={center.y}
+          isSelected={selectedBlock?.id === m.id}
+          onClick={handleBlockClick}
         />
       ))}
+
+      {/* Block panel */}
+      {selectedBlock && (
+        <BlockPanel
+          block={selectedBlock}
+          functions={functions}
+          loading={functionsLoading}
+          selectedFunction={selectedFunction}
+          onFunctionClick={handleFunctionClick}
+          onClose={() => { setSelectedBlock(null); setFunctions([]); setSelectedFunction(null); setProfessions([]) }}
+        />
+      )}
+
+      {/* Function panel */}
+      {selectedFunction && (
+        <FunctionPanel
+          fn={selectedFunction}
+          professions={professions}
+          loading={professionsLoading}
+          onClose={() => { setSelectedFunction(null); setProfessions([]) }}
+        />
+      )}
 
       {/* Bottom stats */}
       <div className="hud-status">
@@ -241,7 +396,7 @@ export default function App() {
         </div>
         <div className="hud-stat">
           <div className="hud-stat-label">Версия</div>
-          <div className="hud-stat-value">v0.2.0</div>
+          <div className="hud-stat-value">v0.3.0</div>
         </div>
       </div>
     </div>
