@@ -13,18 +13,29 @@ const STARS = Array.from({ length: 120 }, (_, i) => ({
   opacity: Math.random() * 0.5 + 0.2,
 }))
 
+const VOTE_TYPES = [
+  { type: 'needed',     label: 'Нужна',    emoji: '🚀' },
+  { type: 'improvable', label: 'Улучшить', emoji: '⚡' },
+  { type: 'redundant',  label: 'Лишняя',   emoji: '❌' },
+]
+
 // ── Helpers ────────────────────────────────────────────────────────
 function degToRad(deg) { return (deg * Math.PI) / 180 }
 
 function modulePosition(angle, distance) {
   const rad = degToRad(angle)
-  return {
-    x: Math.cos(rad) * distance,
-    y: Math.sin(rad) * distance,
-  }
+  return { x: Math.cos(rad) * distance, y: Math.sin(rad) * distance }
 }
 
-// ── Earth component ────────────────────────────────────────────────
+function countVotes(votes, professionId) {
+  const counts = { needed: 0, improvable: 0, redundant: 0 }
+  votes.filter(v => v.profession_id === professionId).forEach(v => {
+    if (counts[v.vote_type] !== undefined) counts[v.vote_type]++
+  })
+  return counts
+}
+
+// ── Earth ──────────────────────────────────────────────────────────
 function Earth() {
   return (
     <div className="earth-wrapper">
@@ -41,13 +52,10 @@ function Earth() {
 // ── Module Block ───────────────────────────────────────────────────
 function ModuleBlock({ module, centerX, centerY, isSelected, onClick }) {
   const pos = modulePosition(module.angle, module.distance)
-  const blockX = centerX + pos.x
-  const blockY = centerY + pos.y
-
   return (
     <div
       className={`module-block${isSelected ? ' module-block--selected' : ''}`}
-      style={{ left: blockX, top: blockY }}
+      style={{ left: centerX + pos.x, top: centerY + pos.y }}
       onClick={() => onClick(module)}
     >
       <div className="module-card" style={isSelected ? { borderColor: module.color, boxShadow: `0 0 20px ${module.color}44` } : {}}>
@@ -55,10 +63,7 @@ function ModuleBlock({ module, centerX, centerY, isSelected, onClick }) {
         <span className="module-icon-hover">{module.icon_hover}</span>
         <div className="module-name">{module.name}</div>
         <div className="module-status">
-          <div
-            className="module-status-bar"
-            style={{ width: '80%', background: `linear-gradient(90deg, ${module.color}, ${module.color}88)` }}
-          />
+          <div className="module-status-bar" style={{ width: '80%', background: `linear-gradient(90deg, ${module.color}, ${module.color}88)` }} />
         </div>
       </div>
       <div className="tooltip">
@@ -69,8 +74,34 @@ function ModuleBlock({ module, centerX, centerY, isSelected, onClick }) {
   )
 }
 
-// ── Function Panel (профессии) ────────────────────────────────────
-function FunctionPanel({ fn, professions, loading, onClose }) {
+// ── Profession Item ────────────────────────────────────────────────
+function ProfessionItem({ profession, user, votes, onVote }) {
+  const counts = countVotes(votes, profession.id)
+  const myVote = votes.find(v => v.profession_id === profession.id && v.user_id === user?.id)
+
+  return (
+    <div className="profession-item">
+      <div className="profession-name">{profession.name}</div>
+      <div className="profession-desc">{profession.description}</div>
+      <div className="profession-votes">
+        {VOTE_TYPES.map(({ type, label, emoji }) => (
+          <button
+            key={type}
+            className={`vote-btn${myVote?.vote_type === type ? ' vote-btn--active' : ''}${!user ? ' vote-btn--disabled' : ''}`}
+            onClick={() => user && onVote(profession.id, type)}
+            title={!user ? 'Войдите чтобы голосовать' : label}
+          >
+            <span>{emoji}</span>
+            <span className="vote-count">{counts[type] || 0}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Function Panel ─────────────────────────────────────────────────
+function FunctionPanel({ fn, professions, loading, user, votes, onVote, onClose }) {
   return (
     <div className="function-panel">
       <div className="block-panel-header">
@@ -82,32 +113,33 @@ function FunctionPanel({ fn, professions, loading, onClose }) {
         </div>
         <button className="block-panel-close" onClick={onClose}>✕</button>
       </div>
-
       <div className="block-panel-desc">{fn.description}</div>
-
       <div className="block-panel-functions">
         {loading ? (
           <div className="block-panel-loading">ЗАГРУЗКА...</div>
         ) : professions.length === 0 ? (
           <div className="block-panel-loading">НЕТ ДАННЫХ</div>
         ) : (
-          professions.map((p, i) => (
-            <div key={p.id} className="function-item profession-item">
-              <div className="function-index">0{i + 1}</div>
-              <div className="function-body">
-                <div className="function-name">{p.name}</div>
-                <div className="function-desc">{p.description}</div>
-              </div>
-            </div>
+          professions.map(p => (
+            <ProfessionItem
+              key={p.id}
+              profession={p}
+              user={user}
+              votes={votes}
+              onVote={onVote}
+            />
           ))
+        )}
+        {!user && professions.length > 0 && (
+          <div className="vote-hint">Войдите чтобы голосовать</div>
         )}
       </div>
     </div>
   )
 }
 
-// ── Block Panel (drill-down) ───────────────────────────────────────
-function BlockPanel({ block, functions, loading, onClose, onFunctionClick, selectedFunction }) {
+// ── Block Panel ────────────────────────────────────────────────────
+function BlockPanel({ block, functions, loading, selectedFunction, onFunctionClick, onClose }) {
   return (
     <div className="block-panel">
       <div className="block-panel-header">
@@ -120,9 +152,7 @@ function BlockPanel({ block, functions, loading, onClose, onFunctionClick, selec
         </div>
         <button className="block-panel-close" onClick={onClose}>✕</button>
       </div>
-
       <div className="block-panel-desc">{block.description}</div>
-
       <div className="block-panel-functions">
         {loading ? (
           <div className="block-panel-loading">ЗАГРУЗКА...</div>
@@ -155,69 +185,27 @@ function Lines({ modules, centerX, centerY }) {
     <svg className="lines-canvas">
       <defs>
         {modules.map(m => (
-          <marker
-            key={`arrow-${m.id}`}
-            id={`arrow-${m.id}`}
-            markerWidth="6"
-            markerHeight="6"
-            refX="5"
-            refY="3"
-            orient="auto"
-          >
+          <marker key={`arrow-${m.id}`} id={`arrow-${m.id}`} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
             <path d="M0,0 L6,3 L0,6 Z" fill={m.color} opacity="0.7" />
           </marker>
         ))}
         <filter id="glow">
           <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-          <feMerge>
-            <feMergeNode in="coloredBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
+          <feMerge><feMergeNode in="coloredBlur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
-
       {modules.map(m => {
         const pos = modulePosition(m.angle, m.distance)
-        const ex = centerX + pos.x
-        const ey = centerY + pos.y
-
+        const ex = centerX + pos.x, ey = centerY + pos.y
         const rad = degToRad(m.angle)
-        const startX = centerX + Math.cos(rad) * 65
-        const startY = centerY + Math.sin(rad) * 65
-
-        const endX = ex - Math.cos(rad) * 72
-        const endY = ey - Math.sin(rad) * 40
-
-        const mx = (startX + endX) / 2
-        const my = (startY + endY) / 2 - 20
-
+        const startX = centerX + Math.cos(rad) * 65, startY = centerY + Math.sin(rad) * 65
+        const endX = ex - Math.cos(rad) * 72, endY = ey - Math.sin(rad) * 40
+        const mx = (startX + endX) / 2, my = (startY + endY) / 2 - 20
         return (
           <g key={m.id}>
-            <path
-              d={`M${startX},${startY} Q${mx},${my} ${endX},${endY}`}
-              stroke={m.color}
-              strokeWidth="1.5"
-              fill="none"
-              opacity="0.15"
-              strokeDasharray="none"
-              filter="url(#glow)"
-            />
-            <path
-              d={`M${startX},${startY} Q${mx},${my} ${endX},${endY}`}
-              stroke={m.color}
-              strokeWidth="1"
-              fill="none"
-              opacity="0.5"
-              strokeDasharray="4 4"
-              markerEnd={`url(#arrow-${m.id})`}
-            >
-              <animate
-                attributeName="stroke-dashoffset"
-                from="8"
-                to="0"
-                dur="1.5s"
-                repeatCount="indefinite"
-              />
+            <path d={`M${startX},${startY} Q${mx},${my} ${endX},${endY}`} stroke={m.color} strokeWidth="1.5" fill="none" opacity="0.15" filter="url(#glow)" />
+            <path d={`M${startX},${startY} Q${mx},${my} ${endX},${endY}`} stroke={m.color} strokeWidth="1" fill="none" opacity="0.5" strokeDasharray="4 4" markerEnd={`url(#arrow-${m.id})`}>
+              <animate attributeName="stroke-dashoffset" from="8" to="0" dur="1.5s" repeatCount="indefinite" />
             </path>
             <circle cx={startX} cy={startY} r="3" fill={m.color} opacity="0.5" />
           </g>
@@ -233,12 +221,14 @@ export default function App() {
   const [center, setCenter] = useState({ x: 0, y: 0 })
   const [blocks, setBlocks] = useState([])
   const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null)
   const [selectedBlock, setSelectedBlock] = useState(null)
   const [functions, setFunctions] = useState([])
   const [functionsLoading, setFunctionsLoading] = useState(false)
   const [selectedFunction, setSelectedFunction] = useState(null)
   const [professions, setProfessions] = useState([])
   const [professionsLoading, setProfessionsLoading] = useState(false)
+  const [votes, setVotes] = useState([])
 
   const updateCenter = useCallback(() => {
     if (containerRef.current) {
@@ -253,116 +243,124 @@ export default function App() {
     return () => window.removeEventListener('resize', updateCenter)
   }, [updateCenter])
 
+  // Загрузка блоков
   useEffect(() => {
-    supabase
-      .from('blocks')
-      .select('*')
-      .order('order_index')
-      .then(({ data, error }) => {
-        if (!error && data) setBlocks(data)
-        setLoading(false)
-      })
+    supabase.from('blocks').select('*').order('order_index').then(({ data }) => {
+      if (data) setBlocks(data)
+      setLoading(false)
+    })
   }, [])
 
+  // Auth
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setUser(session?.user ?? null))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleLogin = () => supabase.auth.signInWithOAuth({
+    provider: 'github',
+    options: { redirectTo: window.location.origin }
+  })
+  const handleLogout = () => supabase.auth.signOut()
+
+  // Клик на блок
   const handleBlockClick = useCallback((block) => {
     if (selectedBlock?.id === block.id) {
-      setSelectedBlock(null)
-      setFunctions([])
-      setSelectedFunction(null)
-      setProfessions([])
+      setSelectedBlock(null); setFunctions([])
+      setSelectedFunction(null); setProfessions([]); setVotes([])
       return
     }
-    setSelectedBlock(block)
-    setFunctions([])
-    setSelectedFunction(null)
-    setProfessions([])
+    setSelectedBlock(block); setFunctions([])
+    setSelectedFunction(null); setProfessions([]); setVotes([])
     setFunctionsLoading(true)
-    supabase
-      .from('functions')
-      .select('*')
-      .eq('block_id', block.id)
-      .order('order_index')
-      .then(({ data, error }) => {
-        if (!error && data) setFunctions(data)
-        setFunctionsLoading(false)
-      })
+    supabase.from('functions').select('*').eq('block_id', block.id).order('order_index').then(({ data }) => {
+      if (data) setFunctions(data)
+      setFunctionsLoading(false)
+    })
   }, [selectedBlock])
 
+  // Клик на функцию
   const handleFunctionClick = useCallback((fn) => {
     if (selectedFunction?.id === fn.id) {
-      setSelectedFunction(null)
-      setProfessions([])
+      setSelectedFunction(null); setProfessions([]); setVotes([])
       return
     }
-    setSelectedFunction(fn)
-    setProfessions([])
+    setSelectedFunction(fn); setProfessions([]); setVotes([])
     setProfessionsLoading(true)
-    supabase
-      .from('professions')
-      .select('*')
-      .eq('function_id', fn.id)
-      .order('order_index')
-      .then(({ data, error }) => {
-        if (!error && data) setProfessions(data)
-        setProfessionsLoading(false)
-      })
+    supabase.from('professions').select('*').eq('function_id', fn.id).order('order_index').then(({ data }) => {
+      if (data) {
+        setProfessions(data)
+        const ids = data.map(p => p.id)
+        supabase.from('votes').select('*').in('profession_id', ids).then(({ data: vdata }) => {
+          if (vdata) setVotes(vdata)
+        })
+      }
+      setProfessionsLoading(false)
+    })
   }, [selectedFunction])
+
+  // Голосование
+  const handleVote = useCallback(async (professionId, voteType) => {
+    if (!user) return
+    const existing = votes.find(v => v.profession_id === professionId && v.user_id === user.id)
+
+    if (existing?.vote_type === voteType) {
+      // Снять голос
+      await supabase.from('votes').delete().eq('id', existing.id)
+      setVotes(prev => prev.filter(v => v.id !== existing.id))
+    } else if (existing) {
+      // Изменить голос
+      await supabase.from('votes').update({ vote_type: voteType }).eq('id', existing.id)
+      setVotes(prev => prev.map(v => v.id === existing.id ? { ...v, vote_type: voteType } : v))
+    } else {
+      // Новый голос
+      const { data } = await supabase.from('votes').insert({ profession_id: professionId, user_id: user.id, vote_type: voteType }).select().single()
+      if (data) setVotes(prev => [...prev, data])
+    }
+  }, [user, votes])
 
   return (
     <div className="dashboard" ref={containerRef}>
-      {/* Background */}
       <div className="grid-overlay" />
       <div className="stars">
         {STARS.map(s => (
-          <div
-            key={s.id}
-            className="star"
-            style={{
-              left: `${s.x}%`,
-              top: `${s.y}%`,
-              width: s.size,
-              height: s.size,
-              '--d': `${s.duration}s`,
-              '--delay': `${s.delay}s`,
-              '--op': s.opacity,
-            }}
-          />
+          <div key={s.id} className="star" style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.size, height: s.size, '--d': `${s.duration}s`, '--delay': `${s.delay}s`, '--op': s.opacity }} />
         ))}
       </div>
 
-      {/* HUD corners */}
       <div className="hud-corner hud-corner--tl" />
       <div className="hud-corner hud-corner--tr" />
       <div className="hud-corner hud-corner--bl" />
       <div className="hud-corner hud-corner--br" />
 
-      {/* Header */}
       <div className="hud-header">
         <h1>E-VOLUTES · PLANETARY DASHBOARD</h1>
         <div className="subtitle">SYSTEM ANALYSIS · CIVILIZATION MODULES</div>
       </div>
 
-      {/* SVG lines */}
-      {!loading && center.x > 0 && (
-        <Lines modules={blocks} centerX={center.x} centerY={center.y} />
-      )}
+      {/* Auth */}
+      <div className="auth-bar">
+        {user ? (
+          <>
+            <span className="auth-user">{user.user_metadata?.user_name || user.email}</span>
+            <button className="auth-btn" onClick={handleLogout}>Выйти</button>
+          </>
+        ) : (
+          <button className="auth-btn" onClick={handleLogin}>Войти через GitHub</button>
+        )}
+      </div>
 
-      {/* Earth */}
+      {!loading && center.x > 0 && <Lines modules={blocks} centerX={center.x} centerY={center.y} />}
+
       <Earth />
 
-      {/* Module blocks */}
       {!loading && center.x > 0 && blocks.map(m => (
-        <ModuleBlock
-          key={m.id}
-          module={m}
-          centerX={center.x}
-          centerY={center.y}
-          isSelected={selectedBlock?.id === m.id}
-          onClick={handleBlockClick}
-        />
+        <ModuleBlock key={m.id} module={m} centerX={center.x} centerY={center.y} isSelected={selectedBlock?.id === m.id} onClick={handleBlockClick} />
       ))}
 
-      {/* Block panel */}
       {selectedBlock && (
         <BlockPanel
           block={selectedBlock}
@@ -370,21 +368,22 @@ export default function App() {
           loading={functionsLoading}
           selectedFunction={selectedFunction}
           onFunctionClick={handleFunctionClick}
-          onClose={() => { setSelectedBlock(null); setFunctions([]); setSelectedFunction(null); setProfessions([]) }}
+          onClose={() => { setSelectedBlock(null); setFunctions([]); setSelectedFunction(null); setProfessions([]); setVotes([]) }}
         />
       )}
 
-      {/* Function panel */}
       {selectedFunction && (
         <FunctionPanel
           fn={selectedFunction}
           professions={professions}
           loading={professionsLoading}
-          onClose={() => { setSelectedFunction(null); setProfessions([]) }}
+          user={user}
+          votes={votes}
+          onVote={handleVote}
+          onClose={() => { setSelectedFunction(null); setProfessions([]); setVotes([]) }}
         />
       )}
 
-      {/* Bottom stats */}
       <div className="hud-status">
         <div className="hud-stat">
           <div className="hud-stat-label">Модули</div>
@@ -396,7 +395,7 @@ export default function App() {
         </div>
         <div className="hud-stat">
           <div className="hud-stat-label">Версия</div>
-          <div className="hud-stat-value">v0.3.0</div>
+          <div className="hud-stat-value">v0.4.0</div>
         </div>
       </div>
     </div>
